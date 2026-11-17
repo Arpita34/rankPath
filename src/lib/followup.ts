@@ -1,6 +1,6 @@
 import { client, MODEL, FALLBACK, textOf } from "./claude";
 import { LANGUAGE_NAMES } from "./languages";
-import { saveLead, type Lead } from "./store";
+import { getLead, saveLead, type Lead } from "./store";
 import { sendWhatsApp } from "./whatsapp";
 
 /** Claude writes a personalised WhatsApp follow-up in the lead's language, then it is sent. */
@@ -35,13 +35,17 @@ export async function generateAndSendFollowup(lead: Lead): Promise<Lead> {
 
   const message =
     res.stop_reason === "refusal" ? "" : textOf(res.content);
-  if (!message) {
-    lead.followup_status = "failed";
-    return saveLead(lead);
+  const sent = message ? await sendWhatsApp(lead.phone, message) : null;
+
+  // Writing the message took a few seconds; save onto the latest stored copy so a chat
+  // turn or score that landed meanwhile isn't overwritten.
+  const latest = (await getLead(lead.id)) ?? lead;
+  if (!sent) {
+    latest.followup_status = "failed";
+    return saveLead(latest);
   }
-  const sent = await sendWhatsApp(lead.phone, message);
-  lead.followup_message = message;
-  lead.followup_status = sent.status;
-  if (sent.status !== "failed") lead.stage = "followed_up";
-  return saveLead(lead);
+  latest.followup_message = message;
+  latest.followup_status = sent.status;
+  if (sent.status !== "failed") latest.stage = "followed_up";
+  return saveLead(latest);
 }

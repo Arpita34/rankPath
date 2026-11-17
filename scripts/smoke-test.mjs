@@ -32,6 +32,8 @@ for (const msg of turns) {
   console.log(`\n> ${msg}\n< ${r.reply}\n  [${r.lead.tier} ${r.lead.intent_score} | ${r.lead.stage} | whatsapp: ${r.lead.followup_status} | ${Date.now() - t0}ms]`);
 }
 
+// Lead scoring runs in the background after each reply; give the last one time to land.
+await new Promise((r) => setTimeout(r, 10000));
 const { leads } = await (await fetch(BASE + "/api/leads")).json();
 const lead = leads.find((l) => l.id === id);
 console.log("\nCRM record:", {

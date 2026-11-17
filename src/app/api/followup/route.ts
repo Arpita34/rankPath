@@ -7,7 +7,7 @@ export const maxDuration = 60;
 
 // Triggered from the dashboard: "send AI follow-up" for leads that went quiet.
 export async function POST(req: Request) {
-  const parsed = z.object({ leadId: z.string().uuid() }).safeParse(await req.json());
+  const parsed = z.object({ leadId: z.string().uuid() }).safeParse(await req.json().catch(() => null));
   if (!parsed.success) return NextResponse.json({ error: "Invalid request" }, { status: 400 });
   const lead = await getLead(parsed.data.leadId);
   if (!lead) return NextResponse.json({ error: "Lead not found" }, { status: 404 });

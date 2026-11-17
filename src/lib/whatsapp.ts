@@ -12,8 +12,9 @@ export async function sendWhatsApp(
     return { status: "simulated", detail: "Twilio not configured - message stored only." };
   }
 
-  const digits = toPhone.replace(/[^\d+]/g, "");
-  const e164 = digits.startsWith("+") ? digits : `+91${digits.replace(/^0+/, "")}`;
+  // Accept "+91 98765 43210", "919876543210", "09876543210" and "9876543210".
+  const d = toPhone.replace(/\D/g, "").replace(/^0+/, "");
+  const e164 = toPhone.trim().startsWith("+") || (d.length === 12 && d.startsWith("91")) ? `+${d}` : `+91${d}`;
 
   const res = await fetch(`https://api.twilio.com/2010-04-01/Accounts/${sid}/Messages.json`, {
     method: "POST",

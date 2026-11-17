@@ -15,7 +15,7 @@ const NewLead = z.object({
 });
 
 export async function POST(req: Request) {
-  const parsed = NewLead.safeParse(await req.json());
+  const parsed = NewLead.safeParse(await req.json().catch(() => null));
   if (!parsed.success) {
     return NextResponse.json({ error: "Invalid form", issues: parsed.error.issues }, { status: 400 });
   }

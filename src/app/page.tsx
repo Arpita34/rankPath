@@ -26,13 +26,17 @@ export default function Home() {
   const [error, setError] = useState<string | null>(null);
   const [status, setStatus] = useState<{ tier: string; stage: string; followup_status: string } | null>(null);
   const endRef = useRef<HTMLDivElement>(null);
+  // Synchronous lock: React state updates are async, so a fast double-click would
+  // otherwise get past the `busy` check twice and send the message twice.
+  const inFlight = useRef(false);
 
   useEffect(() => {
     endRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [msgs, busy]);
 
   async function send(text: string, id = leadId) {
-    if (!id || !text.trim() || busy) return;
+    if (!id || !text.trim() || inFlight.current) return;
+    inFlight.current = true;
     setMsgs((m) => [...m, { role: "user", text }]);
     setInput("");
     setBusy(true);
@@ -50,23 +54,36 @@ export default function Home() {
     } catch (e) {
       setError(e instanceof Error ? e.message : "Something went wrong");
     } finally {
+      inFlight.current = false;
       setBusy(false);
     }
   }
 
+  const starting = useRef(false);
+  const [submitting, setSubmitting] = useState(false);
   async function start(e: React.FormEvent) {
     e.preventDefault();
+    if (starting.current) return; // block double-submit (would create two leads)
+    starting.current = true;
+    setSubmitting(true);
     setError(null);
-    const rank = form.rank ? parseInt(form.rank, 10) : null;
-    const res = await fetch("/api/leads", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ ...form, rank, language: lang }),
-    });
-    const data = await res.json();
-    if (!res.ok) { setError("Please check the form fields."); return; }
-    setLeadId(data.id);
-    send(t.firstMessage(rank), data.id);
+    try {
+      const rank = form.rank ? parseInt(form.rank, 10) : null;
+      const res = await fetch("/api/leads", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ ...form, rank, language: lang }),
+      });
+      const data = await res.json();
+      if (!res.ok) { setError("Please check the form fields."); return; }
+      setLeadId(data.id);
+      send(t.firstMessage(rank), data.id);
+    } catch {
+      setError("Network error, please try again.");
+    } finally {
+      starting.current = false;
+      setSubmitting(false);
+    }
   }
 
   const set = (k: keyof typeof form) => (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) =>
@@ -127,7 +144,7 @@ export default function Home() {
               <input inputMode="numeric" pattern="[0-9]*" className="field mt-1" value={form.rank} onChange={set("rank")} placeholder="e.g. 12450" />
               <span className="mt-1 block text-xs text-ink-2">{t.rankHint}</span>
             </label>
-            <button className="rounded-xl bg-accent px-4 py-3 font-medium text-accent-ink sm:col-span-2">{t.start}</button>
+            <button disabled={submitting} className="rounded-xl bg-accent px-4 py-3 font-medium text-accent-ink disabled:opacity-60 sm:col-span-2">{t.start}</button>
             <p className="text-xs text-ink-2 sm:col-span-2">{t.privacy}</p>
           </form>
           {error && <p className="mt-3 text-sm text-[var(--hot)]">{error}</p>}
