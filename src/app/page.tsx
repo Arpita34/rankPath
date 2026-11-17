@@ -1,69 +1,177 @@
-import Image from "next/image";
+"use client";
+
+import { useEffect, useRef, useState } from "react";
+import { UI } from "@/lib/i18n";
+import { EXAM_LABELS, LANGUAGE_NAMES } from "@/lib/languages";
+import type { Language } from "@/lib/store";
+import { Markdown } from "@/components/Markdown";
+
+type Msg = { role: "user" | "assistant"; text: string };
+
+const LANGS = Object.keys(LANGUAGE_NAMES) as Language[];
+const STATES = ["Telangana", "Andhra Pradesh", "Karnataka", "Tamil Nadu", "Kerala", "Maharashtra", "Uttar Pradesh", "Other"];
 
 export default function Home() {
+  const [lang, setLang] = useState<Language>("en");
+  const t = UI[lang];
+
+  const [form, setForm] = useState({
+    name: "", phone: "", role: "student" as "student" | "parent",
+    state: "Telangana", exam: "TG_EAPCET", rank: "", category: "OPEN",
+  });
+  const [leadId, setLeadId] = useState<string | null>(null);
+  const [msgs, setMsgs] = useState<Msg[]>([]);
+  const [input, setInput] = useState("");
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [status, setStatus] = useState<{ tier: string; stage: string; followup_status: string } | null>(null);
+  const endRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    endRef.current?.scrollIntoView({ behavior: "smooth" });
+  }, [msgs, busy]);
+
+  async function send(text: string, id = leadId) {
+    if (!id || !text.trim() || busy) return;
+    setMsgs((m) => [...m, { role: "user", text }]);
+    setInput("");
+    setBusy(true);
+    setError(null);
+    try {
+      const res = await fetch("/api/chat", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ leadId: id, message: text }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error ?? "Request failed");
+      setMsgs((m) => [...m, { role: "assistant", text: data.reply }]);
+      setStatus(data.lead);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Something went wrong");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function start(e: React.FormEvent) {
+    e.preventDefault();
+    setError(null);
+    const rank = form.rank ? parseInt(form.rank, 10) : null;
+    const res = await fetch("/api/leads", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ ...form, rank, language: lang }),
+    });
+    const data = await res.json();
+    if (!res.ok) { setError("Please check the form fields."); return; }
+    setLeadId(data.id);
+    send(t.firstMessage(rank), data.id);
+  }
+
+  const set = (k: keyof typeof form) => (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) =>
+    setForm((f) => ({ ...f, [k]: e.target.value }));
+
   return (
-    <div className="flex flex-col flex-1 items-center justify-center bg-zinc-50 font-sans dark:bg-black">
-      <main className="flex flex-1 w-full max-w-3xl flex-col items-center justify-between py-32 px-16 bg-white dark:bg-black sm:items-start">
-        <Image
-          className="dark:invert h-5 w-[100px]"
-          src="/next.svg"
-          alt="Next.js logo"
-          width={100}
-          height={20}
-          priority
-        />
-        <div className="flex flex-col items-center gap-6 text-center sm:items-start sm:text-left">
-          <h1 className="max-w-xs text-3xl font-semibold leading-10 tracking-tight text-black dark:text-zinc-50">
-            To get started, edit the{" "}
-            <code className="rounded bg-black/[.06] px-1.5 py-0.5 font-mono text-[0.9em] dark:bg-white/[.08]">
-              page.tsx
-            </code>{" "}
-            file.
-          </h1>
-          <p className="max-w-md text-lg leading-8 text-zinc-600 dark:text-zinc-400">
-            Looking for a starting point or more instructions? Head over to{" "}
-            <a
-              href="https://vercel.com/templates?framework=next.js&utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-              className="font-medium text-zinc-950 dark:text-zinc-50"
-            >
-              Templates
-            </a>{" "}
-            or the{" "}
-            <a
-              href="https://nextjs.org/learn?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-              className="font-medium text-zinc-950 dark:text-zinc-50"
-            >
-              Learning
-            </a>{" "}
-            center.
-          </p>
+    <main className="mx-auto flex w-full max-w-2xl flex-1 flex-col px-4 py-6">
+      <header className="mb-5 flex flex-wrap items-center justify-between gap-3">
+        <div className="text-lg font-semibold tracking-tight">
+          Rank<span className="text-accent">Path</span>
+          <span className="ml-2 text-xs font-normal text-ink-2">with NIAT</span>
         </div>
-        <div className="flex flex-col gap-4 text-base font-medium sm:flex-row">
-          <a
-            className="flex h-12 w-full items-center justify-center gap-2 rounded-full bg-foreground px-5 text-background transition-colors hover:bg-[#383838] dark:hover:bg-[#ccc] md:w-[158px]"
-            href="https://vercel.com/new?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            <Image
-              className="dark:invert h-[14px] w-4"
-              src="/vercel.svg"
-              alt="Vercel logomark"
-              width={16}
-              height={14}
-            />
-            Deploy Now
-          </a>
-          <a
-            className="flex h-12 w-full items-center justify-center rounded-full border border-solid border-black/[.08] px-5 transition-colors hover:border-transparent hover:bg-black/[.04] dark:border-white/[.145] dark:hover:bg-[#1a1a1a] md:w-[158px]"
-            href="https://nextjs.org/docs?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            Documentation
-          </a>
+        <div className="flex flex-wrap gap-1" role="radiogroup" aria-label="Language">
+          {LANGS.map((l) => (
+            <button
+              key={l}
+              onClick={() => setLang(l)}
+              disabled={!!leadId}
+              aria-pressed={lang === l}
+              className={`rounded-full border px-2.5 py-1 text-xs transition ${
+                lang === l ? "border-accent bg-accent text-accent-ink" : "border-line bg-surface text-ink-2 hover:text-ink"
+              } disabled:opacity-60`}
+            >
+              {LANGUAGE_NAMES[l].split(" (")[1]?.replace(")", "") ?? "English"}
+            </button>
+          ))}
         </div>
-      </main>
-    </div>
+      </header>
+
+      {!leadId ? (
+        <section>
+          <p className="text-sm font-medium text-accent">{t.tagline}</p>
+          <h1 className="mt-1 text-2xl font-semibold leading-snug sm:text-3xl">{t.title}</h1>
+          <p className="mt-2 text-ink-2">{t.subtitle}</p>
+
+          <form onSubmit={start} className="mt-6 grid grid-cols-1 gap-3 rounded-2xl border border-line bg-surface p-4 sm:grid-cols-2">
+            <label className="text-sm">{t.name}<input required className="field mt-1" value={form.name} onChange={set("name")} /></label>
+            <label className="text-sm">{t.phone}<input required inputMode="tel" pattern="[0-9+ ]{8,15}" className="field mt-1" value={form.phone} onChange={set("phone")} placeholder="98xxxxxxxx" /></label>
+            <label className="text-sm">{t.iam}
+              <select className="field mt-1" value={form.role} onChange={set("role")}>
+                <option value="student">{t.student}</option><option value="parent">{t.parent}</option>
+              </select>
+            </label>
+            <label className="text-sm">{t.state}
+              <select className="field mt-1" value={form.state} onChange={set("state")}>{STATES.map((s) => <option key={s}>{s}</option>)}</select>
+            </label>
+            <label className="text-sm">{t.exam}
+              <select className="field mt-1" value={form.exam} onChange={set("exam")}>
+                {Object.entries(EXAM_LABELS).map(([k, v]) => <option key={k} value={k}>{v}</option>)}
+              </select>
+            </label>
+            <label className="text-sm">{t.category}
+              <select className="field mt-1" value={form.category} onChange={set("category")}>
+                {["OPEN", "EWS", "OBC", "SC", "ST"].map((c) => <option key={c}>{c}</option>)}
+              </select>
+            </label>
+            <label className="text-sm sm:col-span-2">{t.rank}
+              <input inputMode="numeric" pattern="[0-9]*" className="field mt-1" value={form.rank} onChange={set("rank")} placeholder="e.g. 12450" />
+              <span className="mt-1 block text-xs text-ink-2">{t.rankHint}</span>
+            </label>
+            <button className="rounded-xl bg-accent px-4 py-3 font-medium text-accent-ink sm:col-span-2">{t.start}</button>
+            <p className="text-xs text-ink-2 sm:col-span-2">{t.privacy}</p>
+          </form>
+          {error && <p className="mt-3 text-sm text-[var(--hot)]">{error}</p>}
+        </section>
+      ) : (
+        <section className="flex flex-1 flex-col">
+          <div className="flex-1 space-y-3 overflow-y-auto pb-4">
+            {msgs.map((m, i) => (
+              <div key={i} className={`flex ${m.role === "user" ? "justify-end" : "justify-start"}`}>
+                <div
+                  className={`max-w-[85%] rounded-2xl px-4 py-2.5 text-[15px] leading-relaxed ${
+                    m.role === "user" ? "bg-[var(--bubble-user)] text-[var(--bubble-user-ink)]" : "border border-line bg-surface"
+                  }`}
+                >
+                  {m.role === "assistant" ? <Markdown text={m.text} /> : m.text}
+                </div>
+              </div>
+            ))}
+            {busy && <div className="text-sm text-ink-2">{t.thinking}</div>}
+            {error && <div className="text-sm text-[var(--hot)]">{error}</div>}
+            {status?.stage === "followed_up" && (
+              <div className="rounded-xl bg-accent-soft px-3 py-2 text-sm">
+                ✓ WhatsApp {status.followup_status === "sent" ? "sent" : "prepared (demo mode)"}
+              </div>
+            )}
+            <div ref={endRef} />
+          </div>
+
+          <div className="sticky bottom-0 bg-bg pt-2">
+            <div className="mb-2 flex flex-wrap gap-1.5">
+              {t.quick.map((q) => (
+                <button key={q} onClick={() => send(q)} disabled={busy}
+                  className="rounded-full border border-line bg-surface px-3 py-1 text-xs text-ink-2 hover:text-ink disabled:opacity-50">
+                  {q}
+                </button>
+              ))}
+            </div>
+            <form onSubmit={(e) => { e.preventDefault(); send(input); }} className="flex gap-2">
+              <input className="field" value={input} onChange={(e) => setInput(e.target.value)} placeholder={t.placeholder} />
+              <button disabled={busy} className="rounded-xl bg-accent px-4 font-medium text-accent-ink disabled:opacity-50">{t.send}</button>
+            </form>
+          </div>
+        </section>
+      )}
+    </main>
   );
 }

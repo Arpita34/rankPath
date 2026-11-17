@@ -1,36 +1,58 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# RankPath: Rank → Right College, an AI counsellor for NIAT
 
-## Getting Started
+A multilingual AI admission counsellor that catches 12th-grade students and parents in the
+week JEE Main / EAPCET / KCET results come out. It shows them, honestly, where their rank gets
+them, introduces NIAT where it fits, handles objections, books a counsellor callback and
+follows up on WhatsApp in their language.
 
-First, run the development server:
+## How the system fits together
 
-```bash
-npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
+```
+[1] Landing page + intake form (6 languages)        src/app/page.tsx
+        │  POST /api/leads
+        ▼
+[2] Claude agent (tool-calling loop)                 src/lib/agent.ts
+     tools:
+       find_colleges_for_rank  → public cutoff data  data/cutoffs.json, scripts/scrape_cutoffs.py
+       get_niat_facts          → NIAT knowledge base  src/lib/niat.ts (from niatindia.com)
+       update_lead_insights    → intent score, objections, next action → CRM
+       request_counsellor_callback → books the call + triggers [4]
+        ▼
+[3] Lead store (Supabase, or a local JSON file)     src/lib/store.ts
+        ▼
+[4] Claude-written WhatsApp follow-up → Twilio      src/lib/followup.ts, src/lib/whatsapp.ts
+        ▼
+[5] Live counsellor dashboard                        src/app/dashboard/page.tsx
+     tiles, language/objection breakdowns, transcripts, one-click AI follow-up for quiet leads
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+Model: `claude-opus-5-5` through the Anthropic TypeScript SDK tool runner, with server-side
+refusal fallbacks and prompt caching on the system prompt.
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+## Run locally
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+```bash
+cp .env.example .env.local     # then add your ANTHROPIC_API_KEY
+npm install
+npm run dev                    # http://localhost:3000  and  /dashboard
+```
 
-## Learn More
+Only `ANTHROPIC_API_KEY` is required. Without Supabase, leads go to `data/leads.local.json`.
+Without Twilio, WhatsApp messages are generated and shown as "simulated" on the dashboard.
 
-To learn more about Next.js, take a look at the following resources:
+## Deploy (Vercel)
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+1. Supabase: create a project, run `supabase/schema.sql` in the SQL editor, and copy the project URL and the **secret** key (`sb_secret_...`, under Project Settings → API Keys) into `SUPABASE_URL` / `SUPABASE_SECRET_KEY`.
+2. Push this folder to GitHub, then import it at vercel.com/new.
+3. Add the env vars from `.env.example` in Vercel → Settings → Environment Variables.
+4. Deploy. Share `/` (the counsellor) and `/dashboard`.
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
+## Real cutoff data
 
-## Deploy on Vercel
+`data/cutoffs.json` ships with approximate seed closing ranks. To load official numbers, download
+the last-rank PDF or CSV from the official counselling site and run:
 
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
-
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+```bash
+pip install pdfplumber
+python -I scripts/scrape_cutoffs.py --exam TG_EAPCET --pdf last_rank.pdf
+```
