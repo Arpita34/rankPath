@@ -7,7 +7,9 @@ export async function sendWhatsApp(
 ): Promise<{ status: "sent" | "simulated" | "failed"; detail: string }> {
   const sid = process.env.TWILIO_ACCOUNT_SID;
   const token = process.env.TWILIO_AUTH_TOKEN;
-  const from = process.env.TWILIO_WHATSAPP_FROM; // e.g. "whatsapp:+14155238886" (sandbox)
+  // e.g. "whatsapp:+14155238886". Tolerate spaces and a missing "whatsapp:" prefix.
+  const fromDigits = (process.env.TWILIO_WHATSAPP_FROM ?? "").replace(/\D/g, "");
+  const from = fromDigits ? `whatsapp:+${fromDigits}` : "";
   if (!sid || !token || !from) {
     return { status: "simulated", detail: "Twilio not configured - message stored only." };
   }
@@ -25,7 +27,9 @@ export async function sendWhatsApp(
     body: new URLSearchParams({ From: from, To: `whatsapp:${e164}`, Body: body }),
   });
   if (!res.ok) {
-    return { status: "failed", detail: `Twilio ${res.status}: ${(await res.text()).slice(0, 200)}` };
+    const detail = `Twilio ${res.status}: ${(await res.text()).slice(0, 300)}`;
+    console.error("[whatsapp] send failed", detail);
+    return { status: "failed", detail };
   }
   return { status: "sent", detail: "Delivered to Twilio." };
 }
